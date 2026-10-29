@@ -7,8 +7,16 @@ on:
   # Com `master` aqui tambem, cada merge publicaria o backend duas vezes em paralelo.
   push:
     branches: [develop, 'release/**']
+    # Repositorio proprio desde 29/10/2026: so o que entra na imagem dispara deploy.
     paths:
-      - 'backend/**'
+      - 'src/**'
+      - 'data/**'
+      - 'gradle/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradlew'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/cd-backend-google.yml'
   workflow_dispatch:
   workflow_call:
@@ -136,7 +144,7 @@ jobs:
       - name: Build e Push da Imagem Docker
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: .
           push: true
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ needs.resolve-env.outputs.tag }}

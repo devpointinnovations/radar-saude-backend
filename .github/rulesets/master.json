@@ -40,9 +40,6 @@
             "context": "Backend (Spring Boot)"
           },
           {
-            "context": "Frontend (Expo Web)"
-          },
-          {
             "context": "Origem do PR (master)"
           }
         ]

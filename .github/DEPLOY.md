@@ -7,6 +7,13 @@ Este guia configura o pipeline de CI/CD usando **GitHub Actions** + serviços gr
 > `keep-alive-backend.yml` e os blueprints `render.yaml` saíram do repositório. A
 > referência do backend é [`deploy/google/README.md`](../deploy/google/README.md).
 
+> **29/10/2026:** o monorepo foi dividido em `radar-saude-backend` (este),
+> `radar-saude-mobile`, `painel-admin-frontend` e `radar-saude-docs`, na conta
+> devpointinnovations. Os workflows de APK, AAB e EAS foram para o radar-saude-mobile, e
+> a homologação passou a ser uma por repositório: aqui o `cd-homologacao.yml` publica o
+> backend HML e cria a tag `vX.Y.Z-rc.N` do backend. As seções abaixo que citam
+> `frontend/` e os workflows de mobile descrevem o fluxo até essa data.
+
 ## Arquitetura
 
 | Componente | Serviço | Custo |

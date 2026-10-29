@@ -11,7 +11,10 @@ PROJECT_ID="project-300769db-2135-4560-a83"
 PROJECT_NUMBER="767615581088"
 REGION="southamerica-east1"
 GAR_REPOSITORY="saude-monitor-google"
-GITHUB_REPO="GabrielVogado/saude-monitor"
+# Repositorio do backend desde 29/10/2026 (antes, o monorepo GabrielVogado/saude-monitor).
+# Projeto ja provisionado: a troca de repositorio esta em deploy/google/README.md
+# ("Mudanca de repositorio"), com os dois comandos que liberam o repositorio novo.
+GITHUB_REPO="devpointinnovations/radar-saude-backend"
 
 DEPLOYER_SA="saude-monitor-gitdeploy@${PROJECT_ID}.iam.gserviceaccount.com"
 RUNTIME_SA="saude-monitor-run@${PROJECT_ID}.iam.gserviceaccount.com"
