@@ -3,6 +3,11 @@
 Estes JSON são importáveis em **Settings → Rules → Rulesets → New ruleset →
 Import a ruleset**.
 
+> Repositório `devpointinnovations/radar-saude-backend` desde 29/10/2026. O histórico
+> abaixo (datas de setembro, um colaborador só) vem do monorepo
+> `GabrielVogado/saude-monitor`, de onde este repositório foi separado. Aqui o check
+> exigido é o `Backend (Spring Boot)`; os de mobile e admin ficam nos repositórios deles.
+
 ## ⚠️ Estes arquivos não fazem nada sozinhos
 
 **O GitHub não lê esta pasta.** Não existe convenção `.github/rulesets/` — diferente de
@@ -45,7 +50,7 @@ novo, é reimportar.
 | `deletion` | ✅ | ✅ | Ninguém apaga a branch por acidente |
 | `non_fast_forward` | ✅ | ✅ | Sem `push --force` reescrevendo história compartilhada |
 | `pull_request` | ✅ | ✅ | Toda mudança entra por PR. **Zero aprovações exigidas** — o projeto tem um desenvolvedor só, e exigir revisão travaria o fluxo |
-| `required_status_checks` | ✅ | ✅ | `Backend (Spring Boot)` e `Frontend (Expo Web)` precisam passar |
+| `required_status_checks` | ✅ | ✅ | `Backend (Spring Boot)` precisa passar |
 | `strict_required_status_checks_policy` | ❌ | ✅ | Em `master`, o PR precisa estar **atualizado com a base** antes do merge. Em `develop` seria atrito diário sem ganho |
 | `allowed_merge_methods` | merge, squash, rebase | **só merge** | Em produção, o histórico precisa preservar o commit de merge para rastrear o que foi promovido |
 | `do_not_enforce_on_create` | ✅ | ✅ | A criação da branch não é bloqueada por falta de checks |
@@ -123,7 +128,7 @@ Enquanto o repositório tiver um colaborador só, as duas mudanças seriam teatr
    externo fora do ar.
 
 2. **Os nomes dos checks precisam bater exatamente** com os nomes dos jobs do
-   `ci.yml`: `Backend (Spring Boot)` e `Frontend (Expo Web)`. Se um job for renomeado,
+   `ci.yml`: `Backend (Spring Boot)`. Se um job for renomeado,
    o ruleset passa a exigir um check que nunca chega — e o PR fica travado para
    sempre, esperando algo que não existe. Renomear job implica atualizar estes dois
    arquivos e reimportar.

@@ -7,14 +7,12 @@ name: Alarme - CD vermelho
 #
 # `workflow_run` so dispara pela versao deste arquivo na branch padrao (develop): ele passa a
 # valer no merge, e vale para runs de qualquer branch, por isso o filtro de branch abaixo.
-# `cancelled` fica de fora de proposito: o APK dev cancela o run anterior a cada push novo.
+# `cancelled` fica de fora de proposito (no monorepo o APK dev cancelava o run anterior).
 on:
   workflow_run:
     workflows:
       - 'CD - Backend (Google Cloud Run)'
-      - 'CD - Mobile (APK via Gradle)'
       - 'CD - Homologação'
-      - 'CD - Produção (AAB)'
     types: [completed]
 
 permissions:

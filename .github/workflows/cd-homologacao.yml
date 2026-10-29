@@ -1,27 +1,16 @@
-# Homologacao (HML): cada push na `master` vira uma versao candidata publicada.
+# Homologacao (HML) do backend: cada push na `master` vira uma versao candidata publicada.
 #
 # Decisao do PO em 22/09/2026: `master` = homologacao; producao fica para `release/<tag>`.
+# Desde 29/10/2026 o backend tem repositorio proprio e homologa sozinho; o APK de
+# homologacao sai do radar-saude-mobile, com a rc dele, e aponta para a URL fixa abaixo.
 #
 #   push em master
-#     -> versao   calcula vX.Y.Z-rc.N (X.Y.Z do frontend/app.json, N = proxima rc livre)
-#     -> apk      APK `.hom` assinado com a chave de release (cd-mobile-apk.yml)
+#     -> versao   calcula vX.Y.Z-rc.N (X.Y.Z do `version` do build.gradle, N = proxima rc livre)
 #     -> backend  Cloud Run `saude-monitor-backend-hom` + smoke tests (cd-backend-google.yml)
-#     -> release  confere a URL do APK, cria tag + GitHub Release (pre-release) com o APK
+#     -> release  confere a URL fixa de homologacao, cria tag + GitHub Release (pre-release)
 #
-# A ordem e o ponto (code-review de 22/09/2026): o APK vem ANTES do backend. Ele e a parte
-# que mais falha (Gradle, chave, secrets) e, se falhasse depois do deploy, o backend de
-# homologacao ficaria com codigo novo sem rc correspondente -- e o APK da rc anterior,
-# na mao dos testadores, falando com uma API que pode ter mudado. Nesta ordem, uma
-# falha do APK nao toca no ambiente, e uma falha do backend nao cria tag.
-#
-# O APK nao precisa esperar o deploy para saber a URL: o Cloud Run publica tambem uma
-# URL DETERMINISTICA, `https://<servico>-<numero do projeto>.<regiao>.run.app`
-# (conferida em 22/09/2026 no servico de dev, que responde nela). O job `release` bate
-# nessa URL antes de criar a tag, para provar que o endereco embutido no APK responde.
-#
-# Por que o APK instala por cima da rc anterior: mesma chave (secrets ANDROID_RELEASE_*)
-# e versionCode = X*1_000_000 + Y*10_000 + Z*100 + N, que so cresce -- o job `versao`
-# recusa uma versao menor que a ultima homologada. Ver deploy/android/README.md.
+# Uma falha do backend nao cria tag. A URL fixa e a URL DETERMINISTICA do Cloud Run,
+# `https://<servico>-<numero do projeto>.<regiao>.run.app`, a mesma embutida no APK.
 name: CD - Homologação
 
 on:
@@ -55,9 +44,7 @@ jobs:
     outputs:
       tag: ${{ steps.calc.outputs.tag }}
       version_name: ${{ steps.calc.outputs.version_name }}
-      version_code: ${{ steps.calc.outputs.version_code }}
       anterior: ${{ steps.calc.outputs.anterior }}
-      api_url: ${{ steps.calc.outputs.api_url }}
     steps:
       - name: Só a master publica homologação
         run: |
@@ -66,8 +53,7 @@ jobs:
             exit 1
           fi
 
-      # So o app.json e os NOMES das tags interessam: clone raso + `ls-remote`, em vez de
-      # baixar a historia inteira (que inclui APKs versionados no passado).
+      # So o build.gradle e os NOMES das tags interessam: clone raso + `ls-remote`.
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -76,22 +62,11 @@ jobs:
         run: |
           set -euo pipefail
           TAGS=$(git ls-remote --tags origin 'refs/tags/v*-rc.*' | sed -E 's#.*refs/tags/##; s#\^\{\}$##' | sort -u)
-          BASE=$(node -p "require('./frontend/app.json').expo.version")
-          if ! [[ "$BASE" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "ERRO: expo.version '$BASE' em frontend/app.json nao e X.Y.Z."
+          BASE=$(sed -nE "s/^version = '([^']+)'.*/\1/p" build.gradle)
+          if ! [[ "$BASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERRO: version '$BASE' em build.gradle nao e X.Y.Z."
             exit 1
           fi
-          X=${BASH_REMATCH[1]}; Y=${BASH_REMATCH[2]}; Z=${BASH_REMATCH[3]}
-          # Limites do esquema de versionCode (2 digitos para Y, Z e N).
-          if [ "$Y" -gt 99 ] || [ "$Z" -gt 99 ] || [ "$X" -gt 2000 ]; then
-            echo "ERRO: $BASE fora do esquema de versionCode (Y e Z ate 99, X ate 2000)."
-            exit 1
-          fi
-
-          codigo() { # vX.Y.Z-rc.N -> versionCode
-            [[ "$1" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.([0-9]+)$ ]] || { echo 0; return; }
-            echo $(( 10#${BASH_REMATCH[1]}*1000000 + 10#${BASH_REMATCH[2]}*10000 + 10#${BASH_REMATCH[3]}*100 + 10#${BASH_REMATCH[4]} ))
-          }
 
           # Re-execucao no mesmo commit reaproveita a rc que ja aponta para ele, em vez de
           # queimar um numero novo para o mesmo codigo.
@@ -102,117 +77,37 @@ jobs:
             ULTIMA=$(printf '%s\n' "$TAGS" | grep -E "^v${BASE//./\\.}-rc\.[0-9]+$" | sed 's/.*-rc\.//' | sort -n | tail -1 || true)
             N=$(( ${ULTIMA:-0} + 1 ))
           fi
-          if [ "$N" -gt 99 ]; then
-            echo "ERRO: v${BASE} ja tem 99 rcs. Suba a versao em frontend/app.json."
-            exit 1
-          fi
           TAG="v${BASE}-rc.${N}"
-          CODE=$(codigo "$TAG")
 
-          # A maior rc ja homologada (qualquer X.Y.Z): o APK novo precisa de versionCode
-          # MAIOR, senao o Android recusa instalar por cima. Pega quem baixou a versao em
-          # frontend/app.json por engano.
-          MAIOR=0; ANTERIOR=""
-          for T in $TAGS; do
-            [ "$T" = "$TAG" ] && continue
-            C=$(codigo "$T")
-            if [ "$C" -gt "$MAIOR" ]; then MAIOR=$C; ANTERIOR=$T; fi
-          done
-          if [ -z "$EXISTENTE" ] && [ "$CODE" -le "$MAIOR" ]; then
-            echo "ERRO: $TAG (versionCode $CODE) nao e maior que $ANTERIOR ($MAIOR)."
-            echo "      O APK nao instalaria por cima. Suba expo.version em frontend/app.json."
-            exit 1
-          fi
+          # rc anterior (a maior abaixo desta), para o changelog.
+          ANTERIOR=$(printf '%s\n' "$TAGS" "$TAG" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | sort -uV | grep -B1 -x "$TAG" | head -1)
+          [ "$ANTERIOR" = "$TAG" ] && ANTERIOR=""
 
           {
             echo "tag=$TAG"
             echo "version_name=${BASE}-rc.${N}"
-            echo "version_code=$CODE"
             echo "anterior=$ANTERIOR"
-            echo "api_url=$API_URL_HOM"
           } >> "$GITHUB_OUTPUT"
-          echo "🏷️ \`$TAG\` · versionCode \`$CODE\` · anterior: \`${ANTERIOR:-nenhuma}\`" >> "$GITHUB_STEP_SUMMARY"
-
-  apk:
-    name: APK HML
-    needs: versao
-    uses: ./.github/workflows/cd-mobile-apk.yml
-    with:
-      ambiente: hom
-      api_url: ${{ needs.versao.outputs.api_url }}
-      version_name: ${{ needs.versao.outputs.version_name }}
-      version_code: ${{ needs.versao.outputs.version_code }}
-    secrets: inherit
+          echo "🏷️ \`$TAG\` · anterior: \`${ANTERIOR:-nenhuma}\`" >> "$GITHUB_STEP_SUMMARY"
 
   backend:
     name: Backend HML
-    needs: [versao, apk]
+    needs: versao
     uses: ./.github/workflows/cd-backend-google.yml
     permissions:
       contents: read
       id-token: write
 
-  # Autossuficiente de proposito (achado de 23/09/2026, primeira rc): numa reexecucao
-  # "so dos jobs que falharam", o GitHub NAO preserva os outputs de um workflow
-  # reutilizavel que nao foi reexecutado. `needs.apk.outputs.artefato` chegou VAZIO, e o
-  # download-artifact sem nome baixou TODOS os artefatos da execucao -- inclusive os
-  # registros `.dockerbuild` do build do backend -- e falhou neles. Por isso este job nao
-  # le output de `apk` nem de `versao`: acha o APK pelo commit e tira a versao do nome do
-  # arquivo (`radar-saude-hom-X.Y.Z-rc.N.apk`), que o proprio APK carrega.
   release:
     name: Tag e GitHub Release
-    needs: [versao, backend, apk]
+    needs: [versao, backend]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Baixar o APK
-        uses: actions/download-artifact@v4
-        with:
-          pattern: apk-radar-saude-hom-*-${{ github.sha }}
-          merge-multiple: true
-          path: apk
-
-      - name: Identificar o APK e a versão
-        id: rc
-        run: |
-          set -euo pipefail
-          mapfile -t APKS < <(find apk -maxdepth 1 -name 'radar-saude-hom-*.apk')
-          if [ "${#APKS[@]}" -ne 1 ]; then
-            echo "ERRO: esperado 1 APK de homologacao deste commit, encontrados ${#APKS[@]}: ${APKS[*]:-nenhum}"
-            exit 1
-          fi
-          ARQUIVO=$(basename "${APKS[0]}")
-          if ! [[ "$ARQUIVO" =~ ^radar-saude-hom-([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.([0-9]+)\.apk$ ]]; then
-            echo "ERRO: nome inesperado '$ARQUIVO' (esperado radar-saude-hom-X.Y.Z-rc.N.apk)."
-            exit 1
-          fi
-          X=${BASH_REMATCH[1]}; Y=${BASH_REMATCH[2]}; Z=${BASH_REMATCH[3]}; N=${BASH_REMATCH[4]}
-          VERSION_NAME="$X.$Y.$Z-rc.$N"
-          TAG="v$VERSION_NAME"
-          CODE=$(( 10#$X*1000000 + 10#$Y*10000 + 10#$Z*100 + 10#$N ))
-
-          # rc anterior (maior versionCode abaixo deste), para o changelog. Sem checkout:
-          # o repositorio e publico.
-          ANTERIOR=""; MAIOR=0
-          for T in $(git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY" 'refs/tags/v*-rc.*' | sed -E 's#.*refs/tags/##; s#\^\{\}$##' | sort -u); do
-            [[ "$T" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.([0-9]+)$ ]] || continue
-            C=$(( 10#${BASH_REMATCH[1]}*1000000 + 10#${BASH_REMATCH[2]}*10000 + 10#${BASH_REMATCH[3]}*100 + 10#${BASH_REMATCH[4]} ))
-            if [ "$C" -lt "$CODE" ] && [ "$C" -gt "$MAIOR" ]; then MAIOR=$C; ANTERIOR=$T; fi
-          done
-
-          {
-            echo "arquivo=$ARQUIVO"
-            echo "tag=$TAG"
-            echo "version_name=$VERSION_NAME"
-            echo "version_code=$CODE"
-            echo "anterior=$ANTERIOR"
-          } >> "$GITHUB_OUTPUT"
-
-      # O APK foi construido com a URL deterministica; o deploy devolve a URL de hash.
-      # Antes de publicar a rc, prova que o endereco EMBUTIDO no APK responde -- senao os
-      # testadores instalariam um app sem backend.
-      - name: Conferir a URL embutida no APK
+      # O deploy devolve a URL de hash; o APK usa a URL deterministica. Antes de publicar
+      # a rc, prova que a URL fixa de homologacao responde.
+      - name: Conferir a URL fixa de homologação
         run: |
           for TENTATIVA in 1 2 3 4 5 6; do
             CODIGO=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "$API_URL_HOM/actuator/health" || echo 000)
@@ -220,24 +115,21 @@ jobs:
             [ "$CODIGO" = "200" ] && exit 0
             sleep 10
           done
-          echo "ERRO: $API_URL_HOM (embutida no APK) nao respondeu 200."
+          echo "ERRO: $API_URL_HOM nao respondeu 200."
           exit 1
 
       - name: Criar tag e Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.rc.outputs.tag }}
-          VERSION_NAME: ${{ steps.rc.outputs.version_name }}
-          VERSION_CODE: ${{ steps.rc.outputs.version_code }}
-          ANTERIOR: ${{ steps.rc.outputs.anterior }}
-          ARQUIVO: ${{ steps.rc.outputs.arquivo }}
+          TAG: ${{ needs.versao.outputs.tag }}
+          VERSION_NAME: ${{ needs.versao.outputs.version_name }}
+          ANTERIOR: ${{ needs.versao.outputs.anterior }}
         run: |
           set -euo pipefail
 
-          # Re-execucao: a Release ja existe, so troca o APK.
+          # Re-execucao: a Release ja existe.
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" "apk/$ARQUIVO" --clobber -R "$GITHUB_REPOSITORY"
-            echo "♻️ Release \`$TAG\` já existia — APK substituído." >> "$GITHUB_STEP_SUMMARY"
+            echo "♻️ Release \`$TAG\` já existia." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -247,21 +139,20 @@ jobs:
           MUDANCAS=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${ARGS[@]}" --jq .body)
 
           {
-            echo "## Radar Saúde HML $VERSION_NAME"
+            echo "## Radar Saúde Backend HML $VERSION_NAME"
             echo ""
-            echo "- **Instalar:** baixe \`$ARQUIVO\` abaixo e abra no Android. Se já houver uma versão HML instalada, ela é **atualizada** (sem desinstalar, dados mantidos)."
             echo "- **Backend de homologação:** $API_URL_HOM"
-            echo "- **versionCode:** $VERSION_CODE · commit \`${GITHUB_SHA:0:7}\`"
+            echo "- **Commit:** \`${GITHUB_SHA:0:7}\` (imagem no Artifact Registry com esta SHA)"
             echo ""
             echo "$MUDANCAS"
           } > notas.md
 
-          gh release create "$TAG" "apk/$ARQUIVO" \
+          gh release create "$TAG" \
             -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --prerelease \
-            --title "Radar Saúde HML $VERSION_NAME" \
+            --title "Radar Saúde Backend HML $VERSION_NAME" \
             --notes-file notas.md
 
           URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
-          echo "📦 [$TAG]($URL) publicado com \`$ARQUIVO\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "📦 [$TAG]($URL) publicado." >> "$GITHUB_STEP_SUMMARY"

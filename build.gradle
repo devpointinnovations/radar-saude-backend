@@ -8,7 +8,9 @@ plugins {
 }
 
 group = 'br.com.saude_monitor.api'
-version = '0.0.1-SNAPSHOT'
+// Versão base das rc de homologação (vX.Y.Z-rc.N), lida pelo cd-homologacao.yml desde
+// 29/10/2026, quando o backend ganhou repositório próprio. Segue a numeração do monorepo.
+version = '1.0.0'
 
 java {
 	toolchain {
@@ -151,13 +153,14 @@ tasks.named('check') {
 /**
  * SonarQube Cloud. A análise roda no CI depois do `build`, que já deixou as
  * classes compiladas e o XML do JaCoCo. Organização e chave precisam ser
- * exatamente as criadas no SonarQube Cloud (Documentos/10-git-flow/MANUAL.md §4.4).
+ * exatamente as criadas no SonarQube Cloud (Documentos/10-git-flow/MANUAL.md §4.4,
+ * no radar-saude-docs). Organização devpointinnovations desde 29/10/2026.
  */
 sonar {
 	properties {
 		property 'sonar.host.url', 'https://sonarcloud.io'
-		property 'sonar.organization', 'gabrielvogado'
-		property 'sonar.projectKey', 'gabrielvogado_saude-monitor-backend'
+		property 'sonar.organization', 'devpointinnovations'
+		property 'sonar.projectKey', 'devpointinnovations_radar-saude-backend'
 		property 'sonar.projectName', 'Radar Saúde - Backend'
 		property 'sonar.coverage.jacoco.xmlReportPaths',
 			layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.path

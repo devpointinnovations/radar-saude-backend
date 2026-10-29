@@ -19,8 +19,10 @@ e o `setup-gcp.sh` criava `saude-monitor-*-dev` -- nomes que o workflow nunca le
 secrets de dev em uso foram criados a mao sem sufixo. Script e tabela foram alinhados
 a realidade.
 
-Homologacao: `master` e publicada pelo `cd-homologacao.yml` (backend -> APK -> tag e
-GitHub Release), que chama o `cd-backend-google.yml` por `workflow_call`. Secrets:
+Homologacao: `master` e publicada pelo `cd-homologacao.yml` (backend -> tag e GitHub
+Release `vX.Y.Z-rc.N`, com X.Y.Z do `version` do `build.gradle`), que chama o
+`cd-backend-google.yml` por `workflow_call`. Desde 29/10/2026 o APK de homologacao sai
+do radar-saude-mobile, com a rc dele. Secrets:
 
 ```bash
 bash deploy/google/setup-homologacao.sh
@@ -48,7 +50,33 @@ federacao de identidade (WIF) restrita a este repositorio e os secrets de `dev`.
 
 Sem chave JSON no repositorio. O GitHub Actions troca seu token OIDC por
 credencial do GCP via Workload Identity Federation, e a troca so e aceita para
-`GabrielVogado/saude-monitor` (`attribute-condition` do provider).
+`devpointinnovations/radar-saude-backend` (`attribute-condition` do provider). Ate
+29/10/2026 era `GabrielVogado/saude-monitor`.
+
+### Mudanca de repositorio (29/10/2026)
+
+O projeto do GCP ja existe; so a federacao precisa conhecer o repositorio novo. Rodar
+uma vez, com uma conta Owner do projeto, ANTES do primeiro deploy por este repositorio:
+
+```bash
+# 1. O provider passa a aceitar o repositorio novo. Durante a transicao aceita os dois;
+#    depois do primeiro deploy verde por aqui, rodar de novo so com o novo.
+gcloud iam workload-identity-pools providers update-oidc github-provider \
+  --project=project-300769db-2135-4560-a83 \
+  --location=global --workload-identity-pool=github-pool \
+  --attribute-condition="assertion.repository in ['devpointinnovations/radar-saude-backend', 'GabrielVogado/saude-monitor']"
+
+# 2. O repositorio novo pode se passar pela conta de deploy.
+gcloud iam service-accounts add-iam-policy-binding \
+  saude-monitor-gitdeploy@project-300769db-2135-4560-a83.iam.gserviceaccount.com \
+  --project=project-300769db-2135-4560-a83 \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/767615581088/locations/global/workloadIdentityPools/github-pool/attribute.repository/devpointinnovations/radar-saude-backend"
+```
+
+Fim da transicao: trocar a condicao para so `assertion.repository == 'devpointinnovations/radar-saude-backend'`
+e remover o binding antigo com `remove-iam-policy-binding` (mesmo `--member`, com
+`GabrielVogado/saude-monitor`).
 
 Duas identidades, de proposito:
 

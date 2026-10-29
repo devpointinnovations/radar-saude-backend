@@ -1,6 +1,21 @@
-# saude-monitor — Backend
+# Radar Saúde — Backend
 
 API REST em Spring Boot 4 com Java 25, responsavel por receber e persistir dados de autenticacao no MongoDB (Percona Server for MongoDB 7.0).
+
+## Repositórios do projeto
+
+| Repositório | Conteúdo |
+|---|---|
+| [radar-saude-mobile](https://github.com/devpointinnovations/radar-saude-mobile) | App Expo / React Native |
+| [painel-admin-frontend](https://github.com/devpointinnovations/painel-admin-frontend) | Painel Admin Angular |
+| **radar-saude-backend** (este) | API Spring Boot, deploy no Cloud Run (`deploy/google/`), testes de desempenho (`perf/`) |
+| [radar-saude-docs](https://github.com/devpointinnovations/radar-saude-docs) | Documentação, ADRs, backlog, registros de homologação e site |
+
+Até 29/10/2026 o backend era a pasta `backend/` do monorepo
+[GabrielVogado/saude-monitor](https://github.com/GabrielVogado/saude-monitor). O histórico
+foi preservado aqui; PRs antigos citados nas mensagens de commit (`#123`) são daquele
+repositório. Referências a `backend/...` e `Documentos/...` em comentários antigos apontam,
+agora, para a raiz deste repositório e para o radar-saude-docs.
 
 ---
 
@@ -20,7 +35,7 @@ API REST em Spring Boot 4 com Java 25, responsavel por receber e persistir dados
 Copie o arquivo de exemplo e ajuste as credenciais se necessario:
 
 ```powershell
-cd D:\saude-monitor\backend
+cd D:\radar-saude-backend
 Copy-Item .env.example .env
 ```
 
@@ -42,7 +57,7 @@ Variaveis disponiveis em `.env`:
 ### 2. Subir tudo com um comando
 
 ```powershell
-cd D:\saude-monitor\backend
+cd D:\radar-saude-backend
 docker compose --env-file .env up -d --build
 ```
 
@@ -73,7 +88,7 @@ Invoke-WebRequest -Uri "http://localhost:8080/api/v1/auth/login" `
 Se quiser rodar apenas o banco no Docker e o backend pela IDE/Gradle, voce precisa do Java 25 instalado:
 
 ```powershell
-cd D:\saude-monitor\backend
+cd D:\radar-saude-backend
 docker compose --env-file .env up -d percona-mongodb
 Get-Content .env | ForEach-Object {
   if ($_ -match '^(?<k>[^#=]+)=(?<v>.*)$') {
@@ -128,7 +143,7 @@ Invoke-WebRequest -Uri "http://localhost:8080/api/v1/auth/login" `
 ## Testes automatizados
 
 ```powershell
-cd D:\saude-monitor\backend
+cd D:\radar-saude-backend
 .\gradlew.bat test
 ```
 
@@ -137,7 +152,7 @@ cd D:\saude-monitor\backend
 ## Parar o ambiente
 
 ```powershell
-cd D:\saude-monitor\backend
+cd D:\radar-saude-backend
 docker compose down
 ```
 
